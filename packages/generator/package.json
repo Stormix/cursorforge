@@ -1,0 +1,26 @@
+{
+  "name": "@cursorforge/generator",
+  "version": "0.0.0",
+  "description": "Code generator for cursorforge",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./generator": "./src/generator.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "format": "npx ultracite format",
+    "lint": "npx ultracite lint"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@cursorforge/typescript-config": "workspace:*",
+    "typescript": "catalog:",
+    "ultracite": "5.2.9"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

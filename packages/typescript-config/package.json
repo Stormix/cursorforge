@@ -1,0 +1,20 @@
+{
+  "name": "@cursorforge/typescript-config",
+  "version": "0.0.0",
+  "description": "TypeScript configuration for cursorforge",
+  "private": true,
+  "license": "MIT",
+  "files": [
+    "base.json"
+  ],
+  "scripts": {
+    "format": "npx ultracite format",
+    "lint": "npx ultracite lint"
+  },
+  "devDependencies": {
+    "ultracite": "5.2.9"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "@cursorforge/tui",
+  "version": "0.0.0",
+  "description": "Terminal UI components for cursorforge",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.tsx"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "format": "npx ultracite format",
+    "lint": "npx ultracite lint"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.1.13",
+    "@opentui/react": "^0.1.13",
+    "react": "catalog:"
+  },
+  "devDependencies": {
+    "@cursorforge/typescript-config": "workspace:*",
+    "@types/react": "catalog:",
+    "typescript": "catalog:",
+    "ultracite": "5.2.9"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
