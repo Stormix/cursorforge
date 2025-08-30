@@ -1,0 +1,727 @@
+{% assign rule_description = "Deployment standards, CI/CD pipelines, and environment management for {{PROJECT_NAME}}" %}
+{% assign globs = "**/.github/**, **/deploy/**, **/*deploy*.*, **/*ci*.*, **/*pipeline*.*" %}
+{% assign alwaysApply = false %}
+
+{% comment %} Template Variables {% endcomment %}
+{% assign PROJECT_NAME = PROJECT_NAME | default: "MyProject" %}
+{% assign PACKAGE_MANAGER = PACKAGE_MANAGER | default: "npm" %}
+{% assign DEPLOYMENT_PLATFORM = DEPLOYMENT_PLATFORM | default: "Docker/Kubernetes" %}
+
+{% layout "layout/cursor.mdc.liquid" %}
+
+{% block content %}
+# {{PROJECT_NAME}} Deployment Pipeline
+
+## Deployment Philosophy
+
+- **Automated Deployments**: Minimize manual intervention and human error
+- **Environment Parity**: Keep development, staging, and production environments consistent
+- **Zero-Downtime**: Deploy without service interruption
+- **Rollback Ready**: Quick rollback capability for failed deployments
+- **Observable**: Full visibility into deployment status and application health
+
+## Environment Strategy
+
+### Environment Tiers
+```yaml
+# Development
+development:
+  purpose: Local development and testing
+  data: Synthetic/test data
+  monitoring: Basic logging
+  
+# Staging
+staging:
+  purpose: Pre-production validation
+  data: Sanitized production data or realistic test data
+  monitoring: Full production-like monitoring
+  
+# Production
+production:
+  purpose: Live user-facing environment
+  data: Real user data
+  monitoring: Full monitoring, alerting, and observability
+```
+
+### Environment Configuration
+```typescript
+// config/environments.ts
+interface EnvironmentConfig {
+  name: string;
+  database: {
+    url: string;
+    poolSize: number;
+    ssl: boolean;
+  };
+  cache: {
+    url: string;
+    ttl: number;
+  };
+  logging: {
+    level: string;
+    destination: string;
+  };
+  features: Record<string, boolean>;
+}
+
+export const environments: Record<string, EnvironmentConfig> = {
+  development: {
+    name: 'development',
+    database: {
+      url: process.env.DEV_DATABASE_URL!,
+      poolSize: 5,
+      ssl: false
+    },
+    cache: {
+      url: process.env.DEV_REDIS_URL!,
+      ttl: 300
+    },
+    logging: {
+      level: 'debug',
+      destination: 'console'
+    },
+    features: {
+      newFeature: true,
+      experimentalApi: true
+    }
+  },
+  staging: {
+    name: 'staging',
+    database: {
+      url: process.env.STAGING_DATABASE_URL!,
+      poolSize: 10,
+      ssl: true
+    },
+    cache: {
+      url: process.env.STAGING_REDIS_URL!,
+      ttl: 600
+    },
+    logging: {
+      level: 'info',
+      destination: 'file'
+    },
+    features: {
+      newFeature: true,
+      experimentalApi: false
+    }
+  },
+  production: {
+    name: 'production',
+    database: {
+      url: process.env.DATABASE_URL!,
+      poolSize: 20,
+      ssl: true
+    },
+    cache: {
+      url: process.env.REDIS_URL!,
+      ttl: 3600
+    },
+    logging: {
+      level: 'warn',
+      destination: 'external'
+    },
+    features: {
+      newFeature: false,
+      experimentalApi: false
+    }
+  }
+};
+```
+
+## CI/CD Pipeline
+
+### GitHub Actions Workflow
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy {{PROJECT_NAME}}
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '18'
+  {{PACKAGE_MANAGER}}_VERSION: '8'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: {{PROJECT_NAME}}_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: '{{PACKAGE_MANAGER}}'
+
+      - name: Install dependencies
+        run: {{PACKAGE_MANAGER}} install --frozen-lockfile
+
+      - name: Run linting
+        run: {{PACKAGE_MANAGER}} run lint
+
+      - name: Run type checking
+        run: {{PACKAGE_MANAGER}} run check-types
+
+      - name: Run tests
+        run: {{PACKAGE_MANAGER}} run test:coverage
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/{{PROJECT_NAME}}_test
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRY_URL }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.REGISTRY_URL }}/{{PROJECT_NAME}}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-staging:
+    if: github.ref == 'refs/heads/develop'
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Staging
+        run: |
+          echo "Deploying to staging environment..."
+          # Add your staging deployment commands here
+          # Example: kubectl, terraform, or cloud-specific deployment
+
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests against staging..."
+          {{PACKAGE_MANAGER}} run test:smoke
+        env:
+          API_BASE_URL: ${{ secrets.STAGING_API_URL }}
+
+      - name: Notify team
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run pre-deployment checks
+        run: |
+          echo "Running pre-deployment validation..."
+          # Database migration dry-run
+          # Health check on current production
+          # Resource availability check
+
+      - name: Deploy to Production
+        run: |
+          echo "Deploying to production environment..."
+          # Blue-green deployment or rolling update
+          # Database migrations
+          # Cache warming
+
+      - name: Post-deployment verification
+        run: |
+          echo "Verifying deployment success..."
+          {{PACKAGE_MANAGER}} run test:production
+        env:
+          API_BASE_URL: ${{ secrets.PRODUCTION_API_URL }}
+
+      - name: Notify stakeholders
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#releases'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+```
+
+### Docker Configuration
+```dockerfile
+# Dockerfile
+FROM node:18-alpine AS base
+
+# Install pnpm
+RUN npm install -g {{PACKAGE_MANAGER}}
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package.json {{PACKAGE_MANAGER}}-lock.yaml ./
+COPY packages/*/package.json ./packages/*/
+
+# Install dependencies
+FROM base AS deps
+RUN {{PACKAGE_MANAGER}} install --frozen-lockfile --production=false
+
+# Build application
+FROM base AS builder
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN {{PACKAGE_MANAGER}} run build
+
+# Production image
+FROM node:18-alpine AS runner
+WORKDIR /app
+
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Install production dependencies
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package.json ./package.json
+
+# Set permissions
+USER nextjs
+
+# Expose port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3000/health || exit 1
+
+# Start application
+CMD ["node", "dist/index.js"]
+```
+
+## Deployment Strategies
+
+### Blue-Green Deployment
+```bash
+#!/bin/bash
+# deploy-blue-green.sh
+
+# Configuration
+APP_NAME="{{PROJECT_NAME}}"
+NEW_VERSION=$1
+HEALTH_CHECK_URL="/health"
+TIMEOUT=300
+
+# Determine current active environment
+CURRENT=$(kubectl get service $APP_NAME -o jsonpath='{.spec.selector.version}')
+if [ "$CURRENT" = "blue" ]; then
+    INACTIVE="green"
+else
+    INACTIVE="blue"
+fi
+
+echo "Current active: $CURRENT, deploying to: $INACTIVE"
+
+# Deploy new version to inactive environment
+kubectl set image deployment/$APP_NAME-$INACTIVE $APP_NAME=$APP_NAME:$NEW_VERSION
+
+# Wait for rollout to complete
+kubectl rollout status deployment/$APP_NAME-$INACTIVE --timeout=${TIMEOUT}s
+
+# Health check
+echo "Performing health checks..."
+INACTIVE_POD=$(kubectl get pods -l app=$APP_NAME,version=$INACTIVE -o jsonpath='{.items[0].metadata.name}')
+kubectl exec $INACTIVE_POD -- curl -f http://localhost:3000$HEALTH_CHECK_URL
+
+if [ $? -eq 0 ]; then
+    echo "Health check passed, switching traffic..."
+    
+    # Switch service to point to new version
+    kubectl patch service $APP_NAME -p '{"spec":{"selector":{"version":"'$INACTIVE'"}}}'
+    
+    echo "Traffic switched to $INACTIVE environment"
+    echo "Previous version ($CURRENT) is available for rollback"
+else
+    echo "Health check failed, rolling back..."
+    exit 1
+fi
+```
+
+### Rolling Deployment
+```yaml
+# kubernetes/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{PROJECT_NAME}}
+  labels:
+    app: {{PROJECT_NAME}}
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: {{PROJECT_NAME}}
+  template:
+    metadata:
+      labels:
+        app: {{PROJECT_NAME}}
+    spec:
+      containers:
+      - name: {{PROJECT_NAME}}
+        image: {{PROJECT_NAME}}:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: database-url
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+```
+
+## Monitoring and Observability
+
+### Health Checks
+```typescript
+// routes/health.ts
+import { Router, Request, Response } from 'express';
+import { db } from '../lib/database';
+
+const router = Router();
+
+router.get('/health', async (req: Request, res: Response) => {
+  const checks = await Promise.allSettled([
+    // Database connectivity
+    db.execute(sql`SELECT 1`),
+    
+    // External service checks
+    fetch(process.env.EXTERNAL_API_URL + '/health'),
+    
+    // Memory usage check
+    Promise.resolve(process.memoryUsage()),
+  ]);
+
+  const results = {
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    version: process.env.APP_VERSION,
+    environment: process.env.NODE_ENV,
+    checks: {
+      database: checks[0].status === 'fulfilled' ? 'healthy' : 'unhealthy',
+      externalApi: checks[1].status === 'fulfilled' ? 'healthy' : 'unhealthy',
+      memory: checks[2].status === 'fulfilled' ? 'healthy' : 'unhealthy',
+    }
+  };
+
+  const isHealthy = Object.values(results.checks).every(status => status === 'healthy');
+  results.status = isHealthy ? 'healthy' : 'unhealthy';
+
+  res.status(isHealthy ? 200 : 503).json(results);
+});
+
+router.get('/readiness', async (req: Request, res: Response) => {
+  try {
+    // Check if application is ready to receive traffic
+    await db.execute(sql`SELECT 1`);
+    res.status(200).json({ status: 'ready' });
+  } catch (error) {
+    res.status(503).json({ status: 'not ready', error: error.message });
+  }
+});
+
+router.get('/liveness', (req: Request, res: Response) => {
+  // Simple liveness check
+  res.status(200).json({ 
+    status: 'alive',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+export default router;
+```
+
+### Application Metrics
+```typescript
+// lib/monitoring/metrics.ts
+import { register, Counter, Histogram, Gauge } from 'prom-client';
+
+// HTTP request metrics
+export const httpRequestsTotal = new Counter({
+  name: 'http_requests_total',
+  help: 'Total number of HTTP requests',
+  labelNames: ['method', 'route', 'status_code'],
+});
+
+export const httpRequestDuration = new Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route'],
+  buckets: [0.1, 0.5, 1, 2, 5],
+});
+
+// Database metrics
+export const databaseConnectionsActive = new Gauge({
+  name: 'database_connections_active',
+  help: 'Number of active database connections',
+});
+
+export const databaseQueryDuration = new Histogram({
+  name: 'database_query_duration_seconds',
+  help: 'Duration of database queries in seconds',
+  labelNames: ['operation'],
+  buckets: [0.01, 0.05, 0.1, 0.5, 1, 2],
+});
+
+// Business metrics
+export const usersRegistered = new Counter({
+  name: 'users_registered_total',
+  help: 'Total number of user registrations',
+});
+
+export const ordersProcessed = new Counter({
+  name: 'orders_processed_total',
+  help: 'Total number of orders processed',
+  labelNames: ['status'],
+});
+
+// Metrics endpoint
+export const getMetrics = () => register.metrics();
+```
+
+## Rollback Procedures
+
+### Automated Rollback
+```typescript
+// scripts/rollback.ts
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
+
+interface RollbackOptions {
+  environment: 'staging' | 'production';
+  version?: string;
+  reason: string;
+}
+
+export const performRollback = async (options: RollbackOptions) => {
+  const { environment, version, reason } = options;
+  
+  console.log(`Starting rollback for ${environment} environment...`);
+  console.log(`Reason: ${reason}`);
+
+  try {
+    if (version) {
+      // Rollback to specific version
+      await execAsync(`kubectl set image deployment/{{PROJECT_NAME}} {{PROJECT_NAME}}={{PROJECT_NAME}}:${version}`);
+    } else {
+      // Rollback to previous version
+      await execAsync(`kubectl rollout undo deployment/{{PROJECT_NAME}}`);
+    }
+
+    // Wait for rollback to complete
+    await execAsync(`kubectl rollout status deployment/{{PROJECT_NAME}} --timeout=300s`);
+
+    // Verify health after rollback
+    const { stdout } = await execAsync(`kubectl get pods -l app={{PROJECT_NAME}} -o json`);
+    const pods = JSON.parse(stdout);
+    
+    const healthyPods = pods.items.filter((pod: any) => 
+      pod.status.conditions?.some((condition: any) => 
+        condition.type === 'Ready' && condition.status === 'True'
+      )
+    );
+
+    if (healthyPods.length === 0) {
+      throw new Error('No healthy pods after rollback');
+    }
+
+    console.log(`✅ Rollback completed successfully`);
+    console.log(`✅ ${healthyPods.length} healthy pods running`);
+
+    // Notify team
+    await notifyRollback(environment, version, reason, 'success');
+    
+  } catch (error) {
+    console.error(`❌ Rollback failed:`, error);
+    await notifyRollback(environment, version, reason, 'failed');
+    throw error;
+  }
+};
+
+const notifyRollback = async (
+  environment: string,
+  version: string | undefined,
+  reason: string,
+  status: 'success' | 'failed'
+) => {
+  const message = {
+    text: `🔄 Rollback ${status} for {{PROJECT_NAME}} ${environment}`,
+    blocks: [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Rollback ${status}*\n*Environment:* ${environment}\n*Version:* ${version || 'previous'}\n*Reason:* ${reason}`
+        }
+      }
+    ]
+  };
+
+  if (process.env.SLACK_WEBHOOK_URL) {
+    await fetch(process.env.SLACK_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(message)
+    });
+  }
+};
+```
+
+### Manual Rollback Commands
+```bash
+# Quick rollback to previous version
+kubectl rollout undo deployment/{{PROJECT_NAME}}
+
+# Rollback to specific revision
+kubectl rollout undo deployment/{{PROJECT_NAME}} --to-revision=2
+
+# Check rollout status
+kubectl rollout status deployment/{{PROJECT_NAME}}
+
+# View rollout history
+kubectl rollout history deployment/{{PROJECT_NAME}}
+
+# Scale deployment if needed
+kubectl scale deployment/{{PROJECT_NAME}} --replicas=5
+```
+
+## Best Practices
+
+### Deployment Safety
+- **Gradual Rollouts**: Use canary or blue-green deployments
+- **Health Checks**: Implement comprehensive health and readiness checks
+- **Automated Testing**: Run full test suite before deployment
+- **Monitoring**: Monitor key metrics during and after deployment
+- **Rollback Plans**: Always have a tested rollback procedure
+
+### Security in CI/CD
+- **Secret Management**: Use secure secret management (GitHub Secrets, etc.)
+- **Image Scanning**: Scan container images for vulnerabilities
+- **Dependency Audit**: Check for vulnerable dependencies
+- **Access Control**: Limit who can trigger production deployments
+
+### Performance Optimization
+- **Build Caching**: Use Docker layer caching and build caches
+- **Artifact Management**: Store and reuse build artifacts
+- **Parallel Jobs**: Run independent jobs in parallel
+- **Resource Limits**: Set appropriate resource limits for containers
+
+## Emergency Procedures
+
+### Incident Response
+1. **Immediate Response**
+   - Scale down affected services if necessary
+   - Switch to maintenance mode if required
+   - Notify stakeholders immediately
+
+2. **Investigation**
+   - Check application logs and metrics
+   - Review recent deployments and changes
+   - Identify root cause
+
+3. **Resolution**
+   - Apply hotfix or rollback as appropriate
+   - Monitor application stability
+   - Communicate resolution to stakeholders
+
+4. **Post-Incident**
+   - Conduct post-mortem analysis
+   - Update monitoring and alerting
+   - Implement preventive measures
+{% endblock %}

@@ -21,8 +21,7 @@
   "devDependencies": {
     "@cursorforge/typescript-config": "workspace:*",
     "@types/react": "catalog:",
-    "typescript": "catalog:",
-    "ultracite": "5.2.9"
+    "typescript": "catalog:"
   },
   "publishConfig": {
     "access": "public"

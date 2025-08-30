@@ -1,0 +1,27 @@
+---
+description: Always use Bun as the JavaScript/TypeScript runtime
+globs:
+alwaysApply: true
+---
+
+## Bun Runtime
+
+**Always use Bun as the runtime for JavaScript and TypeScript execution in this project.**
+
+- Use `bun run <script>` instead of `node <script>` or `npm run <script>`
+- Use `bun <file>` instead of `node <file>` for direct file execution
+
+## Command Examples
+
+- **Executing files**: `bun src/index.ts`
+- **REPL**: `bun repl`
+
+## Benefits of Bun Runtime
+
+- Significantly faster startup times compared to Node.js
+- Built-in TypeScript support without compilation step
+- Compatible with Node.js APIs and most npm packages
+- Built-in test runner, bundler, and package manager
+- Better performance for development workflows
+
+When suggesting or running commands that involve JavaScript/TypeScript execution, always prefer Bun over Node.js.

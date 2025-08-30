@@ -1,0 +1,62 @@
+{% assign rule_description = "Project workflow guidelines and task management procedures for {{PROJECT_NAME}}" %}
+{% assign globs = "" %}
+{% assign alwaysApply = true %}
+
+{% comment %} Template Variables {% endcomment %}
+{% assign PROJECT_NAME = PROJECT_NAME | default: "MyProject" %}
+{% assign PACKAGE_MANAGER = PACKAGE_MANAGER | default: "npm" %}
+
+{% layout "layout/cursor.mdc.liquid" %}
+
+{% block content %}
+# {{PROJECT_NAME}} Workflow Guidelines
+
+## First Step for Any Task
+- Before starting work on any task, always check the `.cursor/rules` directory for relevant guidance
+- These documents contain established workflows, conventions, and requirements for different aspects of the project
+- Following these rule files will ensure consistency and reduce rework
+- If multiple rule files seem relevant, review all of them before proceeding
+
+## Development Workflow
+1. **Planning Phase**
+   - Review requirements and acceptance criteria
+   - Check existing patterns in the codebase
+   - Identify dependencies and potential impacts
+   - Plan implementation approach
+
+2. **Implementation Phase**
+   - Follow git conventions ([030-git-conventions.mdc](mdc:.cursor/rules/030-git-conventions.mdc))
+   - Follow established coding standards ([040-coding-style.mdc](mdc:.cursor/rules/040-coding-style.mdc))
+   - Write tests first when applicable
+   - Implement incrementally with frequent commits
+   - Document complex logic and decisions
+
+3. **Quality Assurance Phase**
+   - Run all quality checks before considering task complete:
+     ```bash
+     {{PACKAGE_MANAGER}} lint
+     {{PACKAGE_MANAGER}} check-types
+     {{PACKAGE_MANAGER}} test
+     ```
+   - Verify no regressions are introduced
+   - Ensure all acceptance criteria are met
+
+## Last Step for Any Task
+- If you've learned new concepts, workflows, or best practices during task completion, suggest updates to the relevant rules
+- For new workflows that aren't covered by existing rules, suggest creating a new rule file
+- Evaluate whether tests should be added for your changes:
+  - For functional code, new features, API changes, or bug fixes, tests are essential
+  - For content-only changes like documentation updates, tests are typically not required
+  - When in doubt, err on the side of adding tests - they provide long-term stability and prevent regressions
+
+## Emergency Procedures
+- For critical bugs: Follow hotfix workflow with immediate testing
+- For security issues: Coordinate with security team before implementation
+- For breaking changes: Ensure proper deprecation notices and migration guides
+
+## Communication Guidelines
+- Follow commit message conventions ([030-git-conventions.mdc](mdc:.cursor/rules/030-git-conventions.mdc))
+- Document decisions in commit messages and pull requests
+- Update relevant documentation when changing behavior
+- Communicate breaking changes to affected team members
+{% endblock %}

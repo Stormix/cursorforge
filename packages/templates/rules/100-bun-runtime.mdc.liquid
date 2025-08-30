@@ -1,0 +1,76 @@
+{% assign rule_description = "Always use Bun as the JavaScript/TypeScript runtime for {{PROJECT_NAME}}" %}
+{% assign globs = "**/*.ts, **/*.js, **/*.tsx, **/*.jsx, package.json, **/package.json" %}
+{% assign alwaysApply = true %}
+
+{% comment %} Template Variables {% endcomment %}
+{% assign PROJECT_NAME = PROJECT_NAME | default: "MyProject" %}
+
+{% layout "layout/cursor.mdc.liquid" %}
+
+{% block content %}
+# {{PROJECT_NAME}} Runtime Configuration
+
+## Bun Runtime
+
+**Always use Bun as the runtime for JavaScript and TypeScript execution in this project.**
+
+- Use `bun run <script>` instead of `node <script>` or `npm run <script>`
+- Use `bun <file>` instead of `node <file>` for direct file execution
+
+## Command Examples
+
+- **Executing files**: `bun src/index.ts`
+- **Running scripts**: `bun run dev`, `bun run build`, `bun run test`
+- **REPL**: `bun repl`
+- **TypeScript execution**: `bun --watch src/index.ts`
+
+## Development Workflow with Bun
+
+### Local Development
+```bash
+# Start development server
+bun --watch src/index.ts
+
+# Run with environment variables
+bun --env-file=.env.local src/index.ts
+
+# Debug with inspection
+bun --inspect src/index.ts
+```
+
+### Testing with Bun
+```bash
+# Run tests with built-in test runner
+bun test
+
+# Watch mode
+bun test --watch
+
+# Coverage
+bun test --coverage
+
+# Specific test file
+bun test src/utils.test.ts
+```
+
+### Building and Bundling
+```bash
+# Build for production
+bun build src/index.ts --outdir dist
+
+# Bundle with minification
+bun build src/index.ts --outfile dist/app.js --minify
+
+# Build with target specification
+bun build src/index.ts --target browser --outdir public
+```
+
+## Configuration Files
+
+### bun.lockb
+- Bun's equivalent to `package-lock.json` or `yarn.lock`
+- Should be committed to version control
+- Ensures consistent dependency versions across environments
+
+When suggesting or running commands that involve JavaScript/TypeScript execution, always prefer Bun over Node.js for this project.
+{% endblock %}

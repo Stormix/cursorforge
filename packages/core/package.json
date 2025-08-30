@@ -16,8 +16,7 @@
   "dependencies": {},
   "devDependencies": {
     "@cursorforge/typescript-config": "workspace:*",
-    "typescript": "catalog:",
-    "ultracite": "5.2.9"
+    "typescript": "catalog:"
   },
   "publishConfig": {
     "access": "public"

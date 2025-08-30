@@ -11,9 +11,6 @@
     "format": "npx ultracite format",
     "lint": "npx ultracite lint"
   },
-  "devDependencies": {
-    "ultracite": "5.2.9"
-  },
   "publishConfig": {
     "access": "public"
   }

@@ -1,0 +1,128 @@
+{% assign rule_description = "{{PROJECT_NAME}} codebase structure, directories, and available commands" %}
+{% assign globs = "" %}
+{% assign alwaysApply = true %}
+
+{% comment %} Template Variables {% endcomment %}
+{% assign PROJECT_NAME = PROJECT_NAME | default: "MyProject" %}
+{% assign PACKAGE_MANAGER = PACKAGE_MANAGER | default: "npm" %}
+{% assign ROOT_FOLDER = ROOT_FOLDER | default: "src" %}
+{% assign SRC_FOLDER = SRC_FOLDER | default: "src" %}
+{% assign TEST_FOLDER = TEST_FOLDER | default: "tests" %}
+{% assign CONFIG_FILES = CONFIG_FILES | default: "config" %}
+{% assign MAIN_TECH_STACK = MAIN_TECH_STACK | default: "Node.js/TypeScript" %}
+{% assign DATABASE_TYPE = DATABASE_TYPE | default: "PostgreSQL" %}
+
+{% layout "layout/cursor.mdc.liquid" %}
+
+{% block content %}
+# {{PROJECT_NAME}} Project Structure and Commands
+
+## Project Architecture
+
+The project follows a {{MAIN_TECH_STACK}} architecture with the following structure:
+
+### Core Directories
+- `{{ROOT_FOLDER}}/` - Project root directory
+  - `{{SRC_FOLDER}}/` - Source code
+    - `components/` - Reusable components
+    - `pages/` - Page-level components
+    - `lib/` - Utilities and helpers
+    - `hooks/` - Custom hooks (if applicable)
+    - `services/` - Business logic and API interactions
+    - `types/` - TypeScript type definitions
+    - `utils/` - General utility functions
+  - `{{TEST_FOLDER}}/` - Test files
+    - `unit/` - Unit tests
+    - `integration/` - Integration tests
+    - `e2e/` - End-to-end tests
+  - `docs/` - Project documentation
+  - `{{CONFIG_FILES}}/` - Configuration files
+  - `.cursor/` - Cursor AI rules and documentation
+  - `.vscode/` - VS Code configuration
+
+### Configuration Files
+- `package.json` - Project dependencies and scripts
+- `tsconfig.json` - TypeScript configuration
+- `.gitignore` - Git ignore patterns
+- `.env.example` - Environment variables template
+- `{{CONFIG_FILES}}` - Framework-specific configurations
+
+## Available Commands
+
+### Development Commands
+```bash
+# Start development environment
+{{PACKAGE_MANAGER}} dev                    # Start development server
+{{PACKAGE_MANAGER}} start                  # Start production server
+{{PACKAGE_MANAGER}} build                  # Build for production
+
+# Code Quality
+{{PACKAGE_MANAGER}} lint                   # Run linting
+{{PACKAGE_MANAGER}} lint:fix              # Fix linting issues
+{{PACKAGE_MANAGER}} format                # Format code
+{{PACKAGE_MANAGER}} check-types           # Type check
+{{PACKAGE_MANAGER}} test                  # Run tests
+{{PACKAGE_MANAGER}} test:watch            # Run tests in watch mode
+{{PACKAGE_MANAGER}} test:coverage         # Run tests with coverage
+```
+
+### Database Commands (if applicable)
+```bash
+{{PACKAGE_MANAGER}} db:migrate             # Run database migrations
+{{PACKAGE_MANAGER}} db:seed               # Seed database with sample data
+{{PACKAGE_MANAGER}} db:reset              # Reset database
+{{PACKAGE_MANAGER}} db:studio             # Launch database studio
+```
+
+### Deployment Commands
+```bash
+{{PACKAGE_MANAGER}} build:prod            # Production build
+{{PACKAGE_MANAGER}} deploy:staging        # Deploy to staging
+{{PACKAGE_MANAGER}} deploy:prod           # Deploy to production
+```
+
+## Development Setup
+
+1. **Prerequisites**:
+   - Node.js (version specified in .nvmrc)
+   - {{PACKAGE_MANAGER}} package manager
+   - {{DATABASE_TYPE}} (if applicable)
+
+2. **Installation**:
+   ```bash
+   git clone <repository-url>
+   cd {{PROJECT_NAME}}
+   {{PACKAGE_MANAGER}} install
+   ```
+
+3. **Environment Configuration**:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your local configuration
+   ```
+
+4. **Development**:
+   ```bash
+   {{PACKAGE_MANAGER}} dev
+   ```
+
+## Best Practices
+
+1. **File Organization**
+   - Keep related files together
+   - Use index files for clean imports
+   - Follow established naming conventions
+   - Separate concerns appropriately
+
+2. **Development Workflow**
+   - Always use {{PACKAGE_MANAGER}} for package management
+   - Run quality checks before committing
+   - Keep commits focused and atomic
+   - Write meaningful commit messages
+
+3. **Code Quality**
+   - Follow TypeScript best practices
+   - Write tests for new functionality
+   - Use linting and formatting tools
+   - Document complex logic
+{% endblock %}

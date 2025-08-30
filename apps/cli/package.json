@@ -11,7 +11,9 @@
     "cursorforge": "./src/index.ts"
   },
   "dependencies": {
-    "@cursorforge/tui": "workspace:*"
+    "@cursorforge/tui": "workspace:*",
+    "@cursorforge/templates": "workspace:*",
+    "liquidjs": "^10.9.2"
   },
   "devDependencies": {
     "@types/bun": "latest",

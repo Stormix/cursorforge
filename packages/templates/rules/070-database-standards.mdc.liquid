@@ -1,0 +1,579 @@
+{% assign rule_description = "Database design patterns, migration practices, and data access standards for {{PROJECT_NAME}}" %}
+{% assign globs = "**/migrations/**, **/models/**, **/schemas/**, **/*db*.ts, **/*database*.ts" %}
+{% assign alwaysApply = false %}
+
+{% comment %} Template Variables {% endcomment %}
+{% assign PROJECT_NAME = PROJECT_NAME | default: "MyProject" %}
+{% assign DATABASE_TYPE = DATABASE_TYPE | default: "PostgreSQL" %}
+{% assign PACKAGE_MANAGER = PACKAGE_MANAGER | default: "npm" %}
+
+{% layout "layout/cursor.mdc.liquid" %}
+
+{% block content %}
+# {{PROJECT_NAME}} Database Standards
+
+## Database Design Principles
+
+- **Normalization**: Design normalized schemas to reduce redundancy
+- **Consistency**: Use consistent naming conventions and patterns
+- **Performance**: Optimize for common query patterns
+- **Scalability**: Design for future growth and scaling needs
+- **Data Integrity**: Enforce constraints and validation at database level
+
+## Schema Design
+
+### Naming Conventions
+```sql
+-- Tables: plural, snake_case
+users
+user_profiles
+order_items
+
+-- Columns: snake_case
+user_id
+created_at
+first_name
+
+-- Indexes: descriptive names
+idx_users_email
+idx_orders_created_at
+idx_users_status_created_at
+
+-- Foreign Keys: descriptive names
+fk_orders_user_id
+fk_order_items_order_id
+```
+
+### Column Standards
+```typescript
+// {{DATABASE_TYPE}} Schema Example (using Drizzle ORM)
+import { pgTable, uuid, varchar, timestamp, boolean, integer } from 'drizzle-orm/pg-core';
+
+export const users = pgTable('users', {
+  // Primary key: always UUID
+  id: uuid('id').defaultRandom().primaryKey(),
+  
+  // Required fields
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  
+  // Optional fields with defaults
+  firstName: varchar('first_name', { length: 100 }),
+  lastName: varchar('last_name', { length: 100 }),
+  isActive: boolean('is_active').default(true),
+  
+  // Audit fields - always include
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  
+  // Soft delete
+  deletedAt: timestamp('deleted_at')
+});
+
+export const orders = pgTable('orders', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+  
+  status: varchar('status', { length: 50 }).default('pending'),
+  totalAmount: integer('total_amount').notNull(), // Store in cents
+  
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  deletedAt: timestamp('deleted_at')
+});
+```
+
+## Migration Management
+
+### Migration Structure
+```typescript
+// migrations/0001_create_users_table.ts
+import { sql } from 'drizzle-orm';
+import { pgTable, uuid, varchar, timestamp, boolean } from 'drizzle-orm/pg-core';
+
+export async function up(db: Database) {
+  await db.execute(sql`
+    CREATE TABLE users (
+      id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+      email VARCHAR(255) NOT NULL UNIQUE,
+      first_name VARCHAR(100),
+      last_name VARCHAR(100),
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      deleted_at TIMESTAMP
+    );
+    
+    CREATE INDEX idx_users_email ON users(email);
+    CREATE INDEX idx_users_active_created ON users(is_active, created_at);
+  `);
+}
+
+export async function down(db: Database) {
+  await db.execute(sql`DROP TABLE IF EXISTS users CASCADE;`);
+}
+```
+
+### Migration Best Practices
+```bash
+# Create migration
+{{PACKAGE_MANAGER}} db:generate --name="create_users_table"
+
+# Apply migrations
+{{PACKAGE_MANAGER}} db:migrate
+
+# Rollback last migration
+{{PACKAGE_MANAGER}} db:rollback
+
+# Check migration status
+{{PACKAGE_MANAGER}} db:status
+```
+
+### Safe Migration Practices
+```sql
+-- ✅ DO: Add columns as nullable first
+ALTER TABLE users ADD COLUMN phone_number VARCHAR(20);
+
+-- Later migration to make required
+UPDATE users SET phone_number = '' WHERE phone_number IS NULL;
+ALTER TABLE users ALTER COLUMN phone_number SET NOT NULL;
+
+-- ✅ DO: Add indexes concurrently (PostgreSQL)
+CREATE INDEX CONCURRENTLY idx_users_phone ON users(phone_number);
+
+-- ❌ DON'T: Drop columns immediately
+-- Instead, deprecate and remove in future migration
+ALTER TABLE users ADD COLUMN phone_deprecated BOOLEAN DEFAULT true;
+```
+
+## Data Access Layer
+
+### Repository Pattern
+```typescript
+// repositories/UserRepository.ts
+import { eq, and, isNull, desc } from 'drizzle-orm';
+import { db } from '../lib/database';
+import { users } from '../schemas/users';
+
+export interface UserFilters {
+  isActive?: boolean;
+  search?: string;
+}
+
+export interface PaginationOptions {
+  page: number;
+  limit: number;
+}
+
+export class UserRepository {
+  static async findById(id: string) {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(and(
+        eq(users.id, id),
+        isNull(users.deletedAt)
+      ));
+    
+    return user;
+  }
+
+  static async findByEmail(email: string) {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(and(
+        eq(users.email, email),
+        isNull(users.deletedAt)
+      ));
+    
+    return user;
+  }
+
+  static async list(
+    filters: UserFilters = {},
+    pagination: PaginationOptions
+  ) {
+    const { page, limit } = pagination;
+    const offset = (page - 1) * limit;
+
+    let query = db
+      .select()
+      .from(users)
+      .where(isNull(users.deletedAt))
+      .orderBy(desc(users.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    // Apply filters
+    if (filters.isActive !== undefined) {
+      query = query.where(eq(users.isActive, filters.isActive));
+    }
+
+    if (filters.search) {
+      query = query.where(
+        or(
+          ilike(users.firstName, `%${filters.search}%`),
+          ilike(users.lastName, `%${filters.search}%`),
+          ilike(users.email, `%${filters.search}%`)
+        )
+      );
+    }
+
+    const [data, totalResult] = await Promise.all([
+      query,
+      db.select({ count: sql<number>`count(*)` })
+        .from(users)
+        .where(isNull(users.deletedAt))
+    ]);
+
+    const total = totalResult[0].count;
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
+  }
+
+  static async create(userData: InsertUser) {
+    const [user] = await db
+      .insert(users)
+      .values({
+        ...userData,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      })
+      .returning();
+
+    return user;
+  }
+
+  static async update(id: string, updates: Partial<InsertUser>) {
+    const [user] = await db
+      .update(users)
+      .set({
+        ...updates,
+        updatedAt: new Date()
+      })
+      .where(and(
+        eq(users.id, id),
+        isNull(users.deletedAt)
+      ))
+      .returning();
+
+    return user;
+  }
+
+  static async softDelete(id: string) {
+    const [user] = await db
+      .update(users)
+      .set({
+        deletedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(and(
+        eq(users.id, id),
+        isNull(users.deletedAt)
+      ))
+      .returning();
+
+    return user;
+  }
+}
+```
+
+## Query Optimization
+
+### Index Strategy
+```sql
+-- Single column indexes for frequent filters
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_status ON users(status);
+
+-- Composite indexes for common query patterns
+CREATE INDEX idx_users_active_created ON users(is_active, created_at);
+CREATE INDEX idx_orders_user_status ON orders(user_id, status);
+
+-- Partial indexes for filtered queries
+CREATE INDEX idx_active_users_email ON users(email) WHERE is_active = true;
+```
+
+### Query Performance Guidelines
+```typescript
+// ✅ DO: Use specific selects
+const users = await db
+  .select({
+    id: users.id,
+    email: users.email,
+    firstName: users.firstName
+  })
+  .from(users);
+
+// ❌ DON'T: Always select all columns
+const users = await db.select().from(users);
+
+// ✅ DO: Use joins efficiently
+const usersWithOrders = await db
+  .select({
+    user: users,
+    orderCount: sql<number>`count(${orders.id})`
+  })
+  .from(users)
+  .leftJoin(orders, eq(users.id, orders.userId))
+  .groupBy(users.id);
+
+// ✅ DO: Use prepared statements for repeated queries
+const getUserByEmail = db
+  .select()
+  .from(users)
+  .where(eq(users.email, placeholder('email')))
+  .prepare();
+```
+
+## Data Validation
+
+### Database-Level Constraints
+```sql
+-- Check constraints
+ALTER TABLE users ADD CONSTRAINT check_email_format 
+CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,});
+
+ALTER TABLE orders ADD CONSTRAINT check_positive_amount 
+CHECK (total_amount > 0);
+
+-- Enum constraints
+CREATE TYPE order_status AS ENUM ('pending', 'confirmed', 'shipped', 'delivered', 'cancelled');
+ALTER TABLE orders ALTER COLUMN status TYPE order_status;
+```
+
+### Application-Level Validation
+```typescript
+import { z } from 'zod';
+
+export const CreateUserSchema = z.object({
+  email: z.string().email().max(255),
+  firstName: z.string().min(1).max(100).optional(),
+  lastName: z.string().min(1).max(100).optional(),
+  isActive: z.boolean().default(true)
+});
+
+export const UpdateUserSchema = CreateUserSchema.partial();
+
+export type InsertUser = z.infer<typeof CreateUserSchema>;
+export type UpdateUser = z.infer<typeof UpdateUserSchema>;
+```
+
+## Transaction Management
+
+### Transaction Patterns
+```typescript
+import { db } from '../lib/database';
+
+// Simple transaction
+export const transferFunds = async (fromUserId: string, toUserId: string, amount: number) => {
+  return await db.transaction(async (tx) => {
+    // Debit from source account
+    await tx
+      .update(accounts)
+      .set({
+        balance: sql`balance - ${amount}`,
+        updatedAt: new Date()
+      })
+      .where(eq(accounts.userId, fromUserId));
+
+    // Credit to destination account
+    await tx
+      .update(accounts)
+      .set({
+        balance: sql`balance + ${amount}`,
+        updatedAt: new Date()
+      })
+      .where(eq(accounts.userId, toUserId));
+
+    // Record transaction
+    const [transaction] = await tx
+      .insert(transactions)
+      .values({
+        fromUserId,
+        toUserId,
+        amount,
+        type: 'transfer',
+        createdAt: new Date()
+      })
+      .returning();
+
+    return transaction;
+  });
+};
+```
+
+## Backup and Recovery
+
+### Backup Strategy
+```bash
+# Daily automated backup
+pg_dump {{DATABASE_NAME}} > backup_$(date +%Y%m%d).sql
+
+# Backup with compression
+pg_dump {{DATABASE_NAME}} | gzip > backup_$(date +%Y%m%d).sql.gz
+
+# Backup specific tables
+pg_dump {{DATABASE_NAME}} --table=users --table=orders > partial_backup.sql
+```
+
+### Testing Backup/Recovery
+```typescript
+// Test database seeding for development
+export const seedDatabase = async () => {
+  await db.transaction(async (tx) => {
+    // Create test users
+    const testUsers = await tx
+      .insert(users)
+      .values([
+        {
+          email: 'admin@example.com',
+          firstName: 'Admin',
+          lastName: 'User',
+          isActive: true
+        },
+        {
+          email: 'user@example.com',
+          firstName: 'Test',
+          lastName: 'User',
+          isActive: true
+        }
+      ])
+      .returning();
+
+    // Create test orders
+    await tx
+      .insert(orders)
+      .values([
+        {
+          userId: testUsers[1].id,
+          totalAmount: 2999,
+          status: 'confirmed'
+        }
+      ]);
+  });
+};
+```
+
+## Database Testing
+
+### Test Database Setup
+```typescript
+// testUtils/database.ts
+import { migrate } from 'drizzle-orm/postgres-js/migrator';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+
+const testDb = postgres(process.env.TEST_DATABASE_URL!);
+export const db = drizzle(testDb);
+
+export const setupTestDatabase = async () => {
+  // Run migrations
+  await migrate(db, { migrationsFolder: './migrations' });
+  
+  // Seed test data
+  await seedTestData();
+};
+
+export const cleanupTestDatabase = async () => {
+  // Truncate all tables
+  await db.execute(sql`
+    TRUNCATE TABLE orders, users RESTART IDENTITY CASCADE;
+  `);
+};
+```
+
+### Repository Testing
+```typescript
+// repositories/__tests__/UserRepository.test.ts
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { setupTestDatabase, cleanupTestDatabase } from '../../testUtils/database';
+import { UserRepository } from '../UserRepository';
+
+describe('UserRepository', () => {
+  beforeEach(async () => {
+    await setupTestDatabase();
+  });
+
+  afterEach(async () => {
+    await cleanupTestDatabase();
+  });
+
+  describe('create', () => {
+    it('should create user with valid data', async () => {
+      const userData = {
+        email: 'test@example.com',
+        firstName: 'John',
+        lastName: 'Doe'
+      };
+
+      const user = await UserRepository.create(userData);
+
+      expect(user).toMatchObject(userData);
+      expect(user.id).toBeDefined();
+      expect(user.createdAt).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('findByEmail', () => {
+    it('should return user when email exists', async () => {
+      const userData = {
+        email: 'existing@example.com',
+        firstName: 'Jane',
+        lastName: 'Doe'
+      };
+      
+      await UserRepository.create(userData);
+      const user = await UserRepository.findByEmail(userData.email);
+
+      expect(user).toMatchObject(userData);
+    });
+
+    it('should return undefined when email does not exist', async () => {
+      const user = await UserRepository.findByEmail('nonexistent@example.com');
+      expect(user).toBeUndefined();
+    });
+  });
+});
+```
+
+## Monitoring and Performance
+
+### Query Monitoring
+```typescript
+// Database connection with logging
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+
+const client = postgres(process.env.DATABASE_URL!, {
+  debug: process.env.NODE_ENV === 'development',
+  onnotice: process.env.NODE_ENV === 'development' ? console.log : undefined,
+});
+
+export const db = drizzle(client, {
+  logger: process.env.NODE_ENV === 'development'
+});
+```
+
+### Performance Metrics
+```sql
+-- Monitor slow queries
+SELECT query, mean_time, calls
+FROM pg_stat_statements
+WHERE mean_time > 1000
+ORDER BY mean_time DESC;
+
+-- Check index usage
+SELECT schemaname, tablename, indexname, idx_scan, idx_tup_read, idx_tup_fetch
+FROM pg_stat_user_indexes
+ORDER BY idx_scan ASC;
+```
+{% endblock %}

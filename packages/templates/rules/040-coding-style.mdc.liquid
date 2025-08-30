@@ -1,0 +1,279 @@
+{% assign rule_description = "Coding style guidelines, naming conventions, and best practices for {{PROJECT_NAME}}" %}
+{% assign globs = "**/*.ts, **/*.tsx, **/*.js, **/*.jsx, **/*.vue, **/*.py" %}
+{% assign alwaysApply = true %}
+
+{% comment %} Template Variables {% endcomment %}
+{% assign PROJECT_NAME = PROJECT_NAME | default: "MyProject" %}
+{% assign FRONTEND_FRAMEWORK = FRONTEND_FRAMEWORK | default: "React" %}
+{% assign BACKEND_FRAMEWORK = BACKEND_FRAMEWORK | default: "Express" %}
+
+{% layout "layout/cursor.mdc.liquid" %}
+
+{% block content %}
+# {{PROJECT_NAME}} Coding Style Guidelines
+
+## General Principles
+
+- **Readability First**: Code is written for humans to read and understand
+- **Consistency**: Follow established patterns within the codebase
+- **Simplicity**: Prefer simple, explicit solutions over clever, implicit ones
+- **Maintainability**: Write code that is easy to modify and extend
+
+## Technology-Specific Guidelines
+
+### TypeScript/JavaScript
+- **Use TypeScript strictly** - avoid `any` types
+- **Interfaces vs Types**:
+  - Use `interface` for object shapes that may be extended
+  - Use `type` for unions, intersections, and computed types
+- **Naming Conventions**:
+  ```typescript
+  // ✅ DO: Use descriptive names
+  const userAuthenticationStatus = 'authenticated';
+  const calculateTotalPrice = (items: CartItem[]) => { };
+  
+  // ❌ DON'T: Use abbreviations or unclear names
+  const usrAuthStat = 'auth';
+  const calc = (items: any[]) => { };
+  ```
+
+### {{FRONTEND_FRAMEWORK}} Components (if applicable)
+- **Use functional components** with hooks
+- **Component Structure**:
+  ```typescript
+  // ✅ DO: Well-structured component
+  interface UserProfileProps {
+    user: User;
+    onUpdate: (user: User) => void;
+  }
+  
+  export const UserProfile: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
+    // Hooks at the top
+    const [isEditing, setIsEditing] = useState(false);
+    
+    // Event handlers
+    const handleSave = useCallback(() => {
+      // Implementation
+    }, []);
+    
+    // Render
+    return (
+      <div className="user-profile">
+        {/* Component content */}
+      </div>
+    );
+  };
+  ```
+
+### {{BACKEND_FRAMEWORK}} (if applicable)
+- **Route Structure**: Organize routes by resource
+- **Middleware**: Use for cross-cutting concerns
+- **Error Handling**: Implement consistent error responses
+- **Validation**: Use schema validation (Zod, Joi, etc.)
+
+## Naming Conventions
+
+### Files and Directories
+```
+✅ DO:
+components/UserProfile/UserProfile.tsx
+utils/dateHelpers.ts
+services/apiClient.ts
+
+❌ DON'T:
+components/userprofile.tsx
+utils/date_helpers.ts
+services/API-Client.ts
+```
+
+### Variables and Functions
+```typescript
+// ✅ DO: Descriptive names
+const totalAmount = calculateOrderTotal(items);
+const isUserAuthenticated = checkAuthenticationStatus();
+
+// ❌ DON'T: Unclear abbreviations
+const tot = calcOrdTot(items);
+const isAuth = chkAuth();
+```
+
+### Constants
+```typescript
+// ✅ DO: SCREAMING_SNAKE_CASE for constants
+const MAX_RETRY_ATTEMPTS = 3;
+const API_BASE_URL = 'https://api.example.com';
+
+// Configuration objects can use camelCase
+const apiConfig = {
+  timeout: 5000,
+  retries: 3
+} as const;
+```
+
+## Code Organization
+
+### Import Order
+```typescript
+// 1. External libraries
+import React from 'react';
+import { Router } from 'express';
+
+// 2. Internal modules (absolute imports)
+import { apiClient } from '@/services/apiClient';
+import { UserService } from '@/services/UserService';
+
+// 3. Relative imports
+import { Button } from '../Button';
+import { validateInput } from './utils';
+```
+
+### Function Structure
+```typescript
+// ✅ DO: Clear function structure
+export const processUserOrder = async (
+  userId: string,
+  orderData: OrderInput
+): Promise<ProcessedOrder> => {
+  // Input validation
+  if (!userId || !orderData) {
+    throw new Error('Missing required parameters');
+  }
+  
+  // Main logic
+  const user = await UserService.findById(userId);
+  const processedOrder = await OrderService.process(orderData);
+  
+  // Return result
+  return {
+    ...processedOrder,
+    userId: user.id
+  };
+};
+```
+
+## Comments and Documentation
+
+### When to Comment
+```typescript
+// ✅ DO: Comment complex business logic
+// Calculate compound interest using the formula: A = P(1 + r/n)^(nt)
+const calculateCompoundInterest = (principal: number, rate: number, time: number) => {
+  const n = 12; // Monthly compounding
+  return principal * Math.pow(1 + rate / n, n * time);
+};
+
+// ✅ DO: Explain non-obvious code
+// Using Set for O(1) lookup performance with large datasets
+const uniqueIds = new Set(existingIds);
+
+// ❌ DON'T: Comment obvious code
+// Increment counter by 1
+counter++;
+```
+
+### JSDoc for Public APIs
+```typescript
+/**
+ * Fetches user data with optional filtering and pagination
+ * @param filters - Optional filters to apply
+ * @param page - Page number for pagination (1-based)
+ * @param limit - Number of items per page
+ * @returns Promise resolving to paginated user data
+ * @throws {ValidationError} When filters are invalid
+ * @throws {NotFoundError} When page is out of range
+ */
+export const fetchUsers = async (
+  filters?: UserFilters,
+  page = 1,
+  limit = 20
+): Promise<PaginatedResponse<User>> => {
+  // Implementation
+};
+```
+
+## Error Handling
+
+### Consistent Error Patterns
+```typescript
+// ✅ DO: Use custom error classes
+class ValidationError extends Error {
+  constructor(message: string, public field: string) {
+    super(message);
+    this.name = 'ValidationError';
+  }
+}
+
+// ✅ DO: Handle errors at appropriate levels
+try {
+  const result = await riskyOperation();
+  return result;
+} catch (error) {
+  if (error instanceof ValidationError) {
+    // Handle validation errors specifically
+    logger.warn('Validation failed', { field: error.field });
+    throw error;
+  }
+  
+  // Re-throw unexpected errors
+  logger.error('Unexpected error in operation', error);
+  throw new Error('Operation failed');
+}
+```
+
+## Testing Conventions
+
+### Test File Naming
+```
+src/components/UserProfile.tsx
+src/components/__tests__/UserProfile.test.tsx
+
+src/services/userService.ts
+src/services/__tests__/userService.test.ts
+```
+
+### Test Structure
+```typescript
+describe('UserService', () => {
+  describe('findById', () => {
+    it('should return user when ID exists', async () => {
+      // Arrange
+      const userId = 'user-123';
+      const expectedUser = { id: userId, name: 'John Doe' };
+      
+      // Act
+      const result = await UserService.findById(userId);
+      
+      // Assert
+      expect(result).toEqual(expectedUser);
+    });
+    
+    it('should throw NotFoundError when ID does not exist', async () => {
+      // Arrange
+      const nonExistentId = 'non-existent';
+      
+      // Act & Assert
+      await expect(UserService.findById(nonExistentId))
+        .rejects.toThrow(NotFoundError);
+    });
+  });
+});
+```
+
+## Performance Considerations
+
+- **Prefer `const` over `let`** when variables won't be reassigned
+- **Use appropriate data structures** (Set for uniqueness, Map for key-value pairs)
+- **Implement proper caching** for expensive operations
+- **Lazy load** large dependencies when possible
+- **Use pagination** for large datasets
+
+## Code Quality Guidelines
+
+- **Follow linting rules** consistently across the codebase
+- **Use TypeScript strictly** to catch errors at compile time
+- **Write self-documenting code** with clear naming and structure
+- **Regular refactoring** to keep code maintainable
+- **Code reviews** to maintain quality standards
+
+For git workflow and commit conventions, see [030-git-conventions.mdc](mdc:.cursor/rules/030-git-conventions.mdc).
+{% endblock %}

@@ -1,0 +1,374 @@
+{% assign rule_description = "Testing standards and best practices for {{PROJECT_NAME}}" %}
+{% assign globs = "**/*.test.*, **/*.spec.*, {{TEST_FOLDER}}/**/*" %}
+{% assign alwaysApply = false %}
+
+{% comment %} Template Variables {% endcomment %}
+{% assign PROJECT_NAME = PROJECT_NAME | default: "MyProject" %}
+{% assign TEST_FOLDER = TEST_FOLDER | default: "tests" %}
+{% assign PACKAGE_MANAGER = PACKAGE_MANAGER | default: "npm" %}
+
+{% layout "layout/cursor.mdc.liquid" %}
+
+{% block content %}
+# {{PROJECT_NAME}} Testing Standards
+
+## Testing Philosophy
+
+- **Test Behavior, Not Implementation**: Focus on what the code does, not how it does it
+- **Test-Driven Development**: Write tests before implementation when possible
+- **Comprehensive Coverage**: Aim for high test coverage while focusing on critical paths
+- **Fast Feedback**: Keep tests fast and reliable
+
+## Testing Strategy
+
+### Test Pyramid
+1. **Unit Tests (70%)**: Test individual functions and components in isolation
+2. **Integration Tests (20%)**: Test interactions between modules
+3. **End-to-End Tests (10%)**: Test complete user workflows
+
+### Test Categories
+- **Unit Tests**: Individual functions, components, and modules
+- **Integration Tests**: API endpoints, database interactions
+- **Component Tests**: UI component behavior and rendering
+- **E2E Tests**: Full user workflows and critical paths
+
+## Test Structure and Organization
+
+### File Naming Conventions
+```
+src/
+├── components/
+│   ├── Button/
+│   │   ├── Button.tsx
+│   │   └── Button.test.tsx
+│   └── UserProfile/
+│       ├── UserProfile.tsx
+│       └── UserProfile.test.tsx
+├── services/
+│   ├── apiClient.ts
+│   └── apiClient.test.ts
+└── utils/
+    ├── dateHelpers.ts
+    └── dateHelpers.test.ts
+```
+
+### Test File Template
+```typescript
+// Import testing utilities
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+
+// Import module under test
+import { UserProfile } from './UserProfile';
+
+// Test data
+const mockUser = {
+  id: '1',
+  name: 'John Doe',
+  email: 'john@example.com'
+};
+
+describe('UserProfile', () => {
+  beforeEach(() => {
+    // Setup before each test
+  });
+
+  afterEach(() => {
+    // Cleanup after each test
+  });
+
+  describe('rendering', () => {
+    it('should display user information correctly', () => {
+      // Arrange
+      render(<UserProfile user={mockUser} />);
+      
+      // Act & Assert
+      expect(screen.getByText(mockUser.name)).toBeInTheDocument();
+      expect(screen.getByText(mockUser.email)).toBeInTheDocument();
+    });
+
+    it('should handle missing user data gracefully', () => {
+      // Arrange & Act
+      render(<UserProfile user={null} />);
+      
+      // Assert
+      expect(screen.getByText(/no user data/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('interactions', () => {
+    it('should call onEdit when edit button is clicked', () => {
+      // Arrange
+      const onEdit = vi.fn();
+      render(<UserProfile user={mockUser} onEdit={onEdit} />);
+      
+      // Act
+      fireEvent.click(screen.getByRole('button', { name: /edit/i }));
+      
+      // Assert
+      expect(onEdit).toHaveBeenCalledWith(mockUser);
+    });
+  });
+});
+```
+
+## Unit Testing Guidelines
+
+### Function Testing
+```typescript
+// utils/mathHelpers.test.ts
+import { describe, it, expect } from 'vitest';
+import { calculateTotal, formatCurrency } from './mathHelpers';
+
+describe('mathHelpers', () => {
+  describe('calculateTotal', () => {
+    it('should calculate sum of positive numbers', () => {
+      expect(calculateTotal([1, 2, 3])).toBe(6);
+    });
+
+    it('should handle empty array', () => {
+      expect(calculateTotal([])).toBe(0);
+    });
+
+    it('should handle negative numbers', () => {
+      expect(calculateTotal([-1, -2, 3])).toBe(0);
+    });
+
+    it('should handle decimal numbers', () => {
+      expect(calculateTotal([1.5, 2.5])).toBeCloseTo(4);
+    });
+  });
+});
+```
+
+### Component Testing (React)
+```typescript
+// components/Button.test.tsx
+import { describe, it, expect } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { Button } from './Button';
+
+describe('Button', () => {
+  it('should render with correct text', () => {
+    render(<Button>Click me</Button>);
+    expect(screen.getByRole('button')).toHaveTextContent('Click me');
+  });
+
+  it('should handle click events', () => {
+    const onClick = vi.fn();
+    render(<Button onClick={onClick}>Click me</Button>);
+    
+    fireEvent.click(screen.getByRole('button'));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('should be disabled when disabled prop is true', () => {
+    render(<Button disabled>Click me</Button>);
+    expect(screen.getByRole('button')).toBeDisabled();
+  });
+
+  it('should apply correct CSS classes', () => {
+    render(<Button variant="primary" size="large">Click me</Button>);
+    const button = screen.getByRole('button');
+    expect(button).toHaveClass('btn-primary', 'btn-large');
+  });
+});
+```
+
+## Integration Testing
+
+### API Testing
+```typescript
+// services/userService.test.ts
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { setupTestDb, cleanupTestDb } from '../testUtils/database';
+import { UserService } from './userService';
+
+describe('UserService Integration', () => {
+  beforeEach(async () => {
+    await setupTestDb();
+  });
+
+  afterEach(async () => {
+    await cleanupTestDb();
+  });
+
+  describe('createUser', () => {
+    it('should create user in database', async () => {
+      // Arrange
+      const userData = {
+        name: 'John Doe',
+        email: 'john@example.com'
+      };
+
+      // Act
+      const user = await UserService.createUser(userData);
+
+      // Assert
+      expect(user).toMatchObject(userData);
+      expect(user.id).toBeDefined();
+      expect(user.createdAt).toBeInstanceOf(Date);
+    });
+
+    it('should reject duplicate email addresses', async () => {
+      // Arrange
+      const userData = {
+        name: 'John Doe',
+        email: 'duplicate@example.com'
+      };
+      await UserService.createUser(userData);
+
+      // Act & Assert
+      await expect(UserService.createUser(userData))
+        .rejects.toThrow('Email already exists');
+    });
+  });
+});
+```
+
+## Mocking Guidelines
+
+### External Dependencies
+```typescript
+// Mock external API
+vi.mock('../services/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn()
+  }
+}));
+
+// Mock environment variables
+vi.mock('../config/env', () => ({
+  env: {
+    API_BASE_URL: 'http://test-api.com',
+    DATABASE_URL: 'sqlite://memory'
+  }
+}));
+```
+
+### Date and Time
+```typescript
+// Mock current time
+const mockDate = new Date('2024-01-01T12:00:00Z');
+vi.useFakeTimers();
+vi.setSystemTime(mockDate);
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+```
+
+## Test Data Management
+
+### Test Fixtures
+```typescript
+// testUtils/fixtures.ts
+export const userFixtures = {
+  validUser: {
+    id: '1',
+    name: 'John Doe',
+    email: 'john@example.com',
+    createdAt: new Date('2024-01-01')
+  },
+  adminUser: {
+    id: '2',
+    name: 'Admin User',
+    email: 'admin@example.com',
+    role: 'admin',
+    createdAt: new Date('2024-01-01')
+  }
+};
+
+export const createUser = (overrides = {}) => ({
+  ...userFixtures.validUser,
+  ...overrides
+});
+```
+
+### Database Seeding
+```typescript
+// testUtils/database.ts
+export const setupTestDb = async () => {
+  await db.migrate.latest();
+  await db.seed.run();
+};
+
+export const cleanupTestDb = async () => {
+  await db.raw('TRUNCATE TABLE users CASCADE');
+};
+```
+
+## Test Commands and Configuration
+
+### Available Test Commands
+```bash
+# Run all tests
+{{PACKAGE_MANAGER}} test
+
+# Run tests in watch mode
+{{PACKAGE_MANAGER}} test:watch
+
+# Run tests with coverage
+{{PACKAGE_MANAGER}} test:coverage
+
+# Run specific test file
+{{PACKAGE_MANAGER}} test UserProfile.test.tsx
+
+# Run tests matching pattern
+{{PACKAGE_MANAGER}} test --grep "user authentication"
+```
+
+### Coverage Requirements
+- **Minimum Coverage**: 80% overall
+- **Critical Paths**: 95% coverage required
+- **New Code**: Must include tests
+- **Bug Fixes**: Must include regression tests
+
+## Best Practices
+
+### Test Writing
+- **Descriptive Test Names**: Use "should [expected behavior] when [condition]"
+- **AAA Pattern**: Arrange, Act, Assert
+- **One Assertion Focus**: Each test should focus on one behavior
+- **Test Edge Cases**: Handle null, undefined, empty arrays, etc.
+
+### Performance
+- **Keep Tests Fast**: Unit tests should run in milliseconds
+- **Use Appropriate Test Level**: Don't use integration tests for unit-level concerns
+- **Parallel Execution**: Ensure tests can run in parallel safely
+
+### Maintenance
+- **Keep Tests Simple**: Complex test logic is harder to debug
+- **Update Tests with Code Changes**: Keep tests synchronized
+- **Remove Dead Tests**: Delete tests for removed functionality
+- **Regular Test Reviews**: Review test quality during code reviews
+
+## Continuous Integration
+
+### Pre-commit Hooks
+```bash
+# Run before each commit
+{{PACKAGE_MANAGER}} test
+{{PACKAGE_MANAGER}} lint
+{{PACKAGE_MANAGER}} check-types
+```
+
+### CI Pipeline
+```yaml
+# Example GitHub Actions workflow
+test:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+    - run: {{PACKAGE_MANAGER}} install
+    - run: {{PACKAGE_MANAGER}} test:coverage
+    - run: {{PACKAGE_MANAGER}} lint
+    - run: {{PACKAGE_MANAGER}} check-types
+```
+{% endblock %}

@@ -1,21 +1,28 @@
 {
-  "name": "@cursorforge/utils",
+  "name": "@cursorforge/templates",
   "version": "0.0.0",
-  "description": "Utility functions for cursorforge",
+  "description": "LiquidJS templates for cursor rules",
   "private": true,
   "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./helpers": "./src/helpers.ts",
-    "./constants": "./src/constants.ts"
+    "./templates/*": "./rules/*.liquid"
   },
+  "files": [
+    "rules/*.liquid",
+    "layout/*.liquid",
+    "partials/*.liquid",
+    "src/"
+  ],
   "scripts": {
     "check-types": "tsc --noEmit",
     "format": "npx ultracite format",
     "lint": "npx ultracite lint"
   },
-  "dependencies": {},
+  "dependencies": {
+    "liquidjs": "^10.9.2"
+  },
   "devDependencies": {
     "@cursorforge/typescript-config": "workspace:*",
     "typescript": "catalog:"

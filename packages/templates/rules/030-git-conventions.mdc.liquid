@@ -1,0 +1,515 @@
+{% assign rule_description = "Git workflow, commit conventions, and version control best practices for {{PROJECT_NAME}}" %}
+{% assign globs = "**/.git/**, **/.gitignore, **/.gitattributes" %}
+{% assign alwaysApply = true %}
+
+{% comment %} Template Variables {% endcomment %}
+{% assign PROJECT_NAME = PROJECT_NAME | default: "MyProject" %}
+
+{% layout "layout/cursor.mdc.liquid" %}
+
+{% block content %}
+# {{PROJECT_NAME}} Git Conventions
+
+## Git Workflow
+
+### Branch Strategy
+```
+main/master     # Production-ready code
+develop         # Integration branch for features
+feature/*       # Feature development branches
+hotfix/*        # Critical production fixes
+release/*       # Release preparation branches
+```
+
+### Branch Naming Conventions
+```bash
+# Feature branches
+feature/user-authentication
+feature/payment-integration
+feature/admin-dashboard
+
+# Bug fix branches
+fix/login-redirect-issue
+fix/payment-validation-error
+
+# Hotfix branches
+hotfix/security-vulnerability
+hotfix/critical-data-loss
+
+# Release branches
+release/v1.2.0
+release/v2.0.0-beta
+```
+
+## Commit Message Format
+
+### Standard Format
+```
+<type>(<scope>): <description>
+
+<body>
+
+<footer>
+```
+
+### Commit Types
+- `feat`: New features
+- `fix`: Bug fixes
+- `docs`: Documentation changes
+- `style`: Code formatting (no logic changes)
+- `refactor`: Code restructuring without changing functionality
+- `test`: Adding or updating tests
+- `chore`: Maintenance tasks
+- `perf`: Performance improvements
+- `ci`: CI/CD configuration changes
+- `build`: Build system or dependency changes
+
+### Scope Guidelines
+```bash
+# Use component or area names
+feat(auth): add social login support
+fix(api): resolve timeout issues
+docs(readme): update installation instructions
+test(user): add integration tests
+chore(deps): update dependencies
+```
+
+### Description Guidelines
+- Use imperative mood ("add" not "added" or "adds")
+- Don't capitalize first letter
+- No period at the end
+- Maximum 50 characters
+- Be specific and clear
+
+### Body Guidelines
+- Wrap at 72 characters
+- Explain what and why, not how
+- Use imperative mood
+- Include motivation for the change
+- Separate from description with blank line
+
+### Footer Guidelines
+```bash
+# Breaking changes
+BREAKING CHANGE: API endpoint /users now requires authentication
+
+# Issue references
+Closes #123
+Fixes #456
+Refs #789
+
+# Co-authored commits
+Co-authored-by: Name <email@example.com>
+```
+
+## Commit Examples
+
+### Feature Addition
+```
+feat(auth): add OAuth integration with Google
+
+Implement Google OAuth 2.0 authentication flow to allow users
+to sign in with their Google accounts. This reduces friction
+in the registration process and improves user experience.
+
+- Add Google OAuth configuration
+- Create OAuth callback handler
+- Update user model to support OAuth providers
+- Add tests for OAuth flow
+
+Closes #145
+```
+
+### Bug Fix
+```
+fix(payment): resolve timeout on large transactions
+
+Payment processing was timing out for transactions over $1000
+due to extended fraud detection checks. Increased timeout
+from 30s to 60s and added retry logic for transient failures.
+
+- Increase payment timeout configuration
+- Add exponential backoff retry mechanism
+- Improve error logging for payment failures
+- Add monitoring for payment processing times
+
+Fixes #234
+```
+
+### Breaking Change
+```
+feat(api): migrate to v2 authentication system
+
+Replace JWT tokens with session-based authentication for
+improved security and easier token management. This change
+requires all API clients to update their authentication flow.
+
+BREAKING CHANGE: JWT authentication is no longer supported.
+Clients must migrate to session-based authentication using
+the new /api/v2/auth endpoints.
+
+Migration guide: docs/auth-migration.md
+
+Closes #456
+```
+
+### Documentation Update
+```
+docs(api): add examples for user management endpoints
+
+Add comprehensive examples for all user management API endpoints
+including request/response formats, error scenarios, and
+authentication requirements.
+
+- Add cURL examples for each endpoint
+- Document all error response formats
+- Include authentication header examples
+- Add pagination examples for list endpoints
+```
+
+### Refactoring
+```
+refactor(auth): extract token validation logic
+
+Move JWT token validation logic from middleware to separate
+service for better testability and reusability across
+different authentication flows.
+
+- Create TokenService class
+- Extract validation logic from auth middleware
+- Add comprehensive unit tests for TokenService
+- Update middleware to use new service
+- Maintain backward compatibility
+```
+
+## Git Hooks
+
+### Pre-commit Hook
+```bash
+#!/bin/sh
+# .git/hooks/pre-commit
+
+echo "Running pre-commit checks..."
+
+# Check for linting errors
+npm run lint
+if [ $? -ne 0 ]; then
+  echo "❌ Linting failed. Please fix errors before committing."
+  exit 1
+fi
+
+# Check for type errors
+npm run check-types
+if [ $? -ne 0 ]; then
+  echo "❌ Type checking failed. Please fix errors before committing."
+  exit 1
+fi
+
+# Run tests
+npm run test
+if [ $? -ne 0 ]; then
+  echo "❌ Tests failed. Please fix failing tests before committing."
+  exit 1
+fi
+
+# Check for secrets
+if grep -r "api_key\|secret\|password\|token" . --include="*.ts" --include="*.js" --exclude-dir=node_modules; then
+  echo "❌ Potential secrets detected. Please review before committing."
+  exit 1
+fi
+
+echo "✅ Pre-commit checks passed!"
+```
+
+### Commit Message Hook
+```bash
+#!/bin/sh
+# .git/hooks/commit-msg
+
+# Check commit message format
+commit_regex='^(feat|fix|docs|style|refactor|test|chore|perf|ci|build)(\(.+\))?: .{1,50}'
+
+if ! grep -qE "$commit_regex" "$1"; then
+    echo "❌ Invalid commit message format!"
+    echo ""
+    echo "Format: <type>(<scope>): <description>"
+    echo ""
+    echo "Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build"
+    echo "Scope: Optional, component or area name"
+    echo "Description: Present tense, no period, max 50 chars"
+    echo ""
+    echo "Example: feat(auth): add social login support"
+    exit 1
+fi
+
+echo "✅ Commit message format is valid!"
+```
+
+## Merge Strategies
+
+### Pull Request Guidelines
+```markdown
+# Pull Request Template
+## Description
+Brief description of changes and motivation.
+
+## Type of Change
+- [ ] Bug fix (non-breaking change fixing an issue)
+- [ ] New feature (non-breaking change adding functionality)
+- [ ] Breaking change (fix or feature causing existing functionality to change)
+- [ ] Documentation update
+- [ ] Performance improvement
+- [ ] Refactoring (no functional changes)
+
+## Testing
+- [ ] Unit tests added/updated
+- [ ] Integration tests added/updated
+- [ ] Manual testing completed
+- [ ] All tests passing
+
+## Checklist
+- [ ] Code follows project style guidelines
+- [ ] Self-review completed
+- [ ] Code documented where necessary
+- [ ] Breaking changes documented
+- [ ] Reviewers assigned
+```
+
+### Merge Requirements
+```yaml
+# Branch protection rules
+protection_rules:
+  required_reviews: 2
+  dismiss_stale_reviews: true
+  require_code_owner_reviews: true
+  required_status_checks:
+    - "test"
+    - "lint"
+    - "type-check"
+  enforce_admins: false
+  allow_force_pushes: false
+  allow_deletions: false
+```
+
+## Release Management
+
+### Semantic Versioning
+```
+MAJOR.MINOR.PATCH
+
+MAJOR: Breaking changes
+MINOR: New features (backward compatible)
+PATCH: Bug fixes (backward compatible)
+
+Examples:
+1.0.0 → 1.0.1 (patch: bug fix)
+1.0.1 → 1.1.0 (minor: new feature)
+1.1.0 → 2.0.0 (major: breaking change)
+```
+
+### Release Process
+```bash
+# 1. Create release branch
+git checkout develop
+git pull origin develop
+git checkout -b release/v1.2.0
+
+# 2. Update version numbers
+npm version minor --no-git-tag-version
+git add package.json package-lock.json
+git commit -m "chore(release): bump version to 1.2.0"
+
+# 3. Final testing and bug fixes
+# Make any necessary fixes on release branch
+
+# 4. Merge to main
+git checkout main
+git merge --no-ff release/v1.2.0
+git tag -a v1.2.0 -m "Release version 1.2.0"
+
+# 5. Merge back to develop
+git checkout develop
+git merge --no-ff release/v1.2.0
+
+# 6. Push everything
+git push origin main develop --tags
+
+# 7. Delete release branch
+git branch -d release/v1.2.0
+git push origin --delete release/v1.2.0
+```
+
+### Changelog Generation
+```markdown
+# Changelog Format
+## [1.2.0] - 2024-01-15
+
+### Added
+- Social login integration with Google and GitHub
+- User profile management dashboard
+- Email notification system
+
+### Changed
+- Improved password validation requirements
+- Updated API response format for consistency
+- Enhanced error messaging across the application
+
+### Fixed
+- Resolved login redirect issue after password reset
+- Fixed payment validation for international currencies
+- Corrected timezone handling in date displays
+
+### Deprecated
+- Legacy authentication endpoints (will be removed in v2.0.0)
+
+### Removed
+- Unused user preference fields
+
+### Security
+- Updated JWT token validation logic
+- Added rate limiting to authentication endpoints
+```
+
+## Git Configuration
+
+### Global Git Configuration
+```bash
+# User configuration
+git config --global user.name "Your Name"
+git config --global user.email "your.email@example.com"
+
+# Helpful aliases
+git config --global alias.co checkout
+git config --global alias.br branch
+git config --global alias.ci commit
+git config --global alias.st status
+git config --global alias.last 'log -1 HEAD'
+git config --global alias.visual '!gitk'
+
+# Better diff and merge tools
+git config --global merge.tool vimdiff
+git config --global diff.tool vimdiff
+
+# Automatic line ending handling
+git config --global core.autocrlf input  # Unix/Mac
+git config --global core.autocrlf true   # Windows
+
+# Colorful output
+git config --global color.ui auto
+```
+
+### Repository Configuration
+```bash
+# .gitconfig (repository-specific)
+[core]
+    excludesfile = .gitignore
+    autocrlf = false
+    filemode = false
+
+[pull]
+    rebase = true
+
+[push]
+    default = simple
+    followTags = true
+
+[branch]
+    autosetupmerge = always
+    autosetuprebase = always
+```
+
+## Best Practices
+
+### Commit Frequency
+- **Commit Early, Commit Often**: Make small, logical commits
+- **Atomic Commits**: Each commit should represent one logical change
+- **Commit Complete Features**: Don't commit half-implemented features
+- **Test Before Committing**: Ensure all tests pass before committing
+
+### Code Review Guidelines
+- **Small Pull Requests**: Keep PRs focused and reviewable (< 400 lines)
+- **Clear Descriptions**: Explain what, why, and how in PR descriptions
+- **Test Coverage**: Include tests for new functionality
+- **Documentation**: Update docs for user-facing changes
+- **Breaking Changes**: Clearly mark and document breaking changes
+
+### Git Hygiene
+```bash
+# Keep history clean
+git rebase -i HEAD~3  # Interactive rebase for last 3 commits
+
+# Squash related commits before merging
+git reset --soft HEAD~3
+git commit -m "feat(auth): implement OAuth integration"
+
+# Clean up merged branches
+git branch --merged | grep -v main | xargs git branch -d
+
+# Sync with remote regularly
+git fetch --prune
+git pull --rebase origin main
+```
+
+### Security Considerations
+- **No Secrets in Commits**: Never commit API keys, passwords, or sensitive data
+- **Signed Commits**: Use GPG signing for verified commits
+- **Branch Protection**: Enable branch protection rules for main branches
+- **Regular Audits**: Review commit history for accidentally committed secrets
+
+```bash
+# Setup GPG signing
+git config --global user.signingkey <your-gpg-key-id>
+git config --global commit.gpgsign true
+git config --global tag.gpgsign true
+```
+
+## Troubleshooting
+
+### Common Issues
+```bash
+# Undo last commit (keep changes)
+git reset HEAD~1
+
+# Undo last commit (discard changes)
+git reset --hard HEAD~1
+
+# Fix commit message
+git commit --amend -m "New commit message"
+
+# Unstage files
+git reset HEAD <file>
+
+# Discard local changes
+git checkout -- <file>
+
+# Resolve merge conflicts
+git status                    # See conflicted files
+# Edit files to resolve conflicts
+git add <resolved-files>
+git commit
+
+# Clean untracked files
+git clean -fd
+
+# View file history
+git log --follow <file>
+```
+
+### Recovery Commands
+```bash
+# Find lost commits
+git reflog
+
+# Recover deleted branch
+git checkout -b <branch-name> <commit-hash>
+
+# Recover from force push
+git reset --hard <commit-hash>
+
+# Create patch from commits
+git format-patch -1 <commit-hash>
+
+# Apply patch
+git apply <patch-file>
+```
+{% endblock %}

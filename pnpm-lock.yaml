@@ -47,9 +47,15 @@ importers:
 
   apps/cli:
     dependencies:
+      '@cursorforge/templates':
+        specifier: workspace:*
+        version: link:../../packages/templates
       '@cursorforge/tui':
         specifier: workspace:*
         version: link:../../packages/tui
+      liquidjs:
+        specifier: ^10.9.2
+        version: 10.21.1
       typescript:
         specifier: ^5
         version: 5.9.2
@@ -74,6 +80,22 @@ importers:
         version: 5.2.9(@types/node@24.3.0)(typescript@5.9.2)(yaml@2.8.1)
 
   packages/generator:
+    devDependencies:
+      '@cursorforge/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.2
+      ultracite:
+        specifier: 5.2.9
+        version: 5.2.9(@types/node@24.3.0)(typescript@5.9.2)(yaml@2.8.1)
+
+  packages/templates:
+    dependencies:
+      liquidjs:
+        specifier: ^10.9.2
+        version: 10.21.1
     devDependencies:
       '@cursorforge/typescript-config':
         specifier: workspace:*
@@ -767,6 +789,10 @@ packages:
   colorette@2.0.20:
     resolution: {integrity: sha512-IfEDxwoWIjkeXL1eXcDiow4UbKjhLdq6/EuSVR9GMN7KVH3r9gQ83e73hsz1Nd1T3ijd5xv1wcWRYO+D6kCI2w==}
 
+  commander@10.0.1:
+    resolution: {integrity: sha512-y4Mg2tXshplEbSGzx7amzPwKKOCGuoSRP/CjEdwwk0FOGlUbq6lKuoyDZTNZkmxHdJtp54hdfY/JUrdL7Xfdug==}
+    engines: {node: '>=14'}
+
   commander@14.0.0:
     resolution: {integrity: sha512-2uM9rYjPvyq39NwLRqaiLtWHyDC1FvryJDa2ATTVims5YAS4PupsEQsDvP14FqhFr0P49CYDugi59xaxJlTXRA==}
     engines: {node: '>=20'}
@@ -909,6 +935,11 @@ packages:
   lint-staged@16.1.5:
     resolution: {integrity: sha512-uAeQQwByI6dfV7wpt/gVqg+jAPaSp8WwOA8kKC/dv1qw14oGpnpAisY65ibGHUGDUv0rYaZ8CAJZ/1U8hUvC2A==}
     engines: {node: '>=20.17'}
+    hasBin: true
+
+  liquidjs@10.21.1:
+    resolution: {integrity: sha512-NZXmCwv3RG5nire3fmIn9HsOyJX3vo+ptp0yaXUHAMzSNBhx74Hm+dAGJvscUA6lNqbLuYfXgNavRQ9UbUJhQQ==}
+    engines: {node: '>=14'}
     hasBin: true
 
   listr2@9.0.2:
@@ -1936,6 +1967,8 @@ snapshots:
 
   colorette@2.0.20: {}
 
+  commander@10.0.1: {}
+
   commander@14.0.0: {}
 
   confbox@0.2.2: {}
@@ -2095,6 +2128,10 @@ snapshots:
       yaml: 2.8.1
     transitivePeerDependencies:
       - supports-color
+
+  liquidjs@10.21.1:
+    dependencies:
+      commander: 10.0.1
 
   listr2@9.0.2:
     dependencies:

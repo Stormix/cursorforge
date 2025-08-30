@@ -1,0 +1,531 @@
+{% assign rule_description = "API design standards and conventions for {{PROJECT_NAME}}" %}
+{% assign globs = "**/api/**, **/routes/**, **/*api*.ts, **/*route*.ts" %}
+{% assign alwaysApply = false %}
+
+{% comment %} Template Variables {% endcomment %}
+{% assign PROJECT_NAME = PROJECT_NAME | default: "MyProject" %}
+{% assign PACKAGE_MANAGER = PACKAGE_MANAGER | default: "npm" %}
+
+{% layout "layout/cursor.mdc.liquid" %}
+
+{% block content %}
+# {{PROJECT_NAME}} API Design Standards
+
+## API Design Principles
+
+- **RESTful Design**: Follow REST conventions for resource-based APIs
+- **Consistency**: Maintain consistent patterns across all endpoints
+- **Documentation**: Self-documenting APIs with clear naming and structure
+- **Versioning**: Plan for API evolution and backward compatibility
+- **Security**: Implement proper authentication, authorization, and validation
+
+## URL Structure and Naming
+
+### Resource Naming
+```
+✅ DO: Use nouns for resources
+GET /api/v1/users
+GET /api/v1/orders
+POST /api/v1/products
+
+❌ DON'T: Use verbs in URLs
+GET /api/v1/getUsers
+POST /api/v1/createOrder
+```
+
+### URL Conventions
+```
+# Collection operations
+GET    /api/v1/users              # List users
+POST   /api/v1/users              # Create user
+
+# Resource operations
+GET    /api/v1/users/{id}         # Get specific user
+PUT    /api/v1/users/{id}         # Update user (full)
+PATCH  /api/v1/users/{id}         # Update user (partial)
+DELETE /api/v1/users/{id}         # Delete user
+
+# Nested resources
+GET    /api/v1/users/{id}/orders  # Get user's orders
+POST   /api/v1/users/{id}/orders  # Create order for user
+```
+
+### Query Parameters
+```typescript
+// Pagination
+GET /api/v1/users?page=1&limit=20
+
+// Filtering
+GET /api/v1/users?status=active&role=admin
+
+// Sorting
+GET /api/v1/users?sort=name&order=asc
+
+// Field selection
+GET /api/v1/users?fields=id,name,email
+
+// Search
+GET /api/v1/users?search=john&searchFields=name,email
+```
+
+## HTTP Status Codes
+
+### Standard Status Codes
+```typescript
+// Success
+200 OK           // Successful GET, PUT, PATCH
+201 Created      // Successful POST
+204 No Content   // Successful DELETE
+
+// Client Errors
+400 Bad Request      // Invalid request data
+401 Unauthorized     // Authentication required
+403 Forbidden        // Insufficient permissions
+404 Not Found        // Resource doesn't exist
+409 Conflict         // Resource conflict (duplicate)
+422 Unprocessable    // Validation errors
+
+// Server Errors
+500 Internal Server Error  // Unexpected server error
+503 Service Unavailable   // Temporary unavailability
+```
+
+## Request/Response Format
+
+### Request Validation
+```typescript
+// Using Zod for validation
+import { z } from 'zod';
+
+const CreateUserSchema = z.object({
+  name: z.string().min(1).max(100),
+  email: z.string().email(),
+  age: z.number().int().min(18).optional(),
+  role: z.enum(['user', 'admin']).default('user')
+});
+
+export const createUser = async (req: Request, res: Response) => {
+  try {
+    const userData = CreateUserSchema.parse(req.body);
+    const user = await UserService.create(userData);
+    res.status(201).json(user);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(422).json({
+        error: 'Validation Error',
+        details: error.errors
+      });
+    }
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+```
+
+### Response Format
+```typescript
+// Success Response
+{
+  "data": {
+    "id": "123",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "createdAt": "2024-01-01T12:00:00Z"
+  }
+}
+
+// List Response with Pagination
+{
+  "data": [
+    { "id": "1", "name": "User 1" },
+    { "id": "2", "name": "User 2" }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 100,
+    "totalPages": 5
+  }
+}
+
+// Error Response
+{
+  "error": "Validation Error",
+  "message": "The provided data is invalid",
+  "details": [
+    {
+      "field": "email",
+      "message": "Invalid email format"
+    }
+  ],
+  "code": "VALIDATION_ERROR",
+  "timestamp": "2024-01-01T12:00:00Z"
+}
+```
+
+## Error Handling
+
+### Error Classes
+```typescript
+// Custom error classes
+class APIError extends Error {
+  constructor(
+    public statusCode: number,
+    message: string,
+    public code?: string,
+    public details?: any
+  ) {
+    super(message);
+    this.name = 'APIError';
+  }
+}
+
+class ValidationError extends APIError {
+  constructor(message: string, details: any) {
+    super(422, message, 'VALIDATION_ERROR', details);
+  }
+}
+
+class NotFoundError extends APIError {
+  constructor(resource: string) {
+    super(404, `${resource} not found`, 'NOT_FOUND');
+  }
+}
+```
+
+### Error Middleware
+```typescript
+export const errorHandler = (
+  error: Error,
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  if (error instanceof APIError) {
+    return res.status(error.statusCode).json({
+      error: error.message,
+      code: error.code,
+      details: error.details,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // Log unexpected errors
+  console.error('Unexpected error:', error);
+  
+  res.status(500).json({
+    error: 'Internal Server Error',
+    code: 'INTERNAL_ERROR',
+    timestamp: new Date().toISOString()
+  });
+};
+```
+
+## Authentication and Authorization
+
+### JWT Authentication
+```typescript
+import jwt from 'jsonwebtoken';
+
+interface AuthPayload {
+  userId: string;
+  role: string;
+  permissions: string[];
+}
+
+export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    
+    if (!token) {
+      return res.status(401).json({ error: 'Authentication token required' });
+    }
+
+    const payload = jwt.verify(token, process.env.JWT_SECRET!) as AuthPayload;
+    req.user = payload;
+    next();
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid or expired token' });
+  }
+};
+
+export const authorize = (requiredPermissions: string[]) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user as AuthPayload;
+    
+    const hasPermission = requiredPermissions.some(permission =>
+      user.permissions.includes(permission)
+    );
+
+    if (!hasPermission) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
+    next();
+  };
+};
+```
+
+## Route Organization
+
+### Router Structure
+```typescript
+// routes/users.ts
+import { Router } from 'express';
+import { authenticate, authorize } from '../middleware/auth';
+import * as UserController from '../controllers/UserController';
+
+const router = Router();
+
+// Public routes
+router.post('/register', UserController.register);
+router.post('/login', UserController.login);
+
+// Protected routes
+router.use(authenticate); // Apply to all routes below
+
+router.get('/', UserController.list);
+router.get('/:id', UserController.getById);
+router.put('/:id', UserController.update);
+router.delete('/:id', authorize(['admin']), UserController.delete);
+
+export default router;
+```
+
+### Controller Pattern
+```typescript
+// controllers/UserController.ts
+import { Request, Response } from 'express';
+import { UserService } from '../services/UserService';
+import { CreateUserSchema, UpdateUserSchema } from '../schemas/userSchemas';
+
+export const list = async (req: Request, res: Response) => {
+  try {
+    const { page = 1, limit = 20, search, sort } = req.query;
+    
+    const users = await UserService.list({
+      page: Number(page),
+      limit: Number(limit),
+      search: search as string,
+      sort: sort as string
+    });
+
+    res.json({
+      data: users.data,
+      pagination: users.pagination
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const create = async (req: Request, res: Response) => {
+  try {
+    const userData = CreateUserSchema.parse(req.body);
+    const user = await UserService.create(userData);
+    
+    res.status(201).json({ data: user });
+  } catch (error) {
+    next(error);
+  }
+};
+```
+
+## API Documentation
+
+### OpenAPI/Swagger Integration
+```typescript
+// swagger.ts
+import swaggerJSDoc from 'swagger-jsdoc';
+
+const options = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: '{{PROJECT_NAME}} API',
+      version: '1.0.0',
+      description: 'API documentation for {{PROJECT_NAME}}'
+    },
+    servers: [
+      {
+        url: process.env.API_BASE_URL,
+        description: 'Development server'
+      }
+    ],
+  },
+  apis: ['./src/routes/*.ts', './src/controllers/*.ts'],
+};
+
+export const specs = swaggerJSDoc(options);
+```
+
+### Route Documentation
+```typescript
+/**
+ * @swagger
+ * /api/v1/users:
+ *   get:
+ *     summary: List all users
+ *     tags: [Users]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Items per page
+ *     responses:
+ *       200:
+ *         description: List of users
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/User'
+ *                 pagination:
+ *                   $ref: '#/components/schemas/Pagination'
+ */
+```
+
+## Rate Limiting and Security
+
+### Rate Limiting
+```typescript
+import rateLimit from 'express-rate-limit';
+
+// General rate limit
+export const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: {
+    error: 'Too many requests',
+    retryAfter: '15 minutes'
+  }
+});
+
+// Strict rate limit for auth endpoints
+export const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5, // limit each IP to 5 requests per windowMs
+  message: {
+    error: 'Too many authentication attempts',
+    retryAfter: '15 minutes'
+  }
+});
+```
+
+### Input Sanitization
+```typescript
+import helmet from 'helmet';
+import cors from 'cors';
+
+// Security middleware
+app.use(helmet()); // Set security headers
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+  credentials: true
+}));
+
+// Request size limits
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+```
+
+## Testing API Endpoints
+
+### Integration Tests
+```typescript
+// tests/integration/users.test.ts
+import request from 'supertest';
+import { app } from '../src/app';
+import { setupTestDb, cleanupTestDb } from '../testUtils/database';
+
+describe('Users API', () => {
+  beforeEach(async () => {
+    await setupTestDb();
+  });
+
+  afterEach(async () => {
+    await cleanupTestDb();
+  });
+
+  describe('GET /api/v1/users', () => {
+    it('should return paginated user list', async () => {
+      const response = await request(app)
+        .get('/api/v1/users')
+        .set('Authorization', 'Bearer valid-token')
+        .expect(200);
+
+      expect(response.body).toMatchObject({
+        data: expect.any(Array),
+        pagination: {
+          page: expect.any(Number),
+          limit: expect.any(Number),
+          total: expect.any(Number)
+        }
+      });
+    });
+
+    it('should require authentication', async () => {
+      await request(app)
+        .get('/api/v1/users')
+        .expect(401);
+    });
+  });
+
+  describe('POST /api/v1/users', () => {
+    it('should create user with valid data', async () => {
+      const userData = {
+        name: 'John Doe',
+        email: 'john@example.com'
+      };
+
+      const response = await request(app)
+        .post('/api/v1/users')
+        .set('Authorization', 'Bearer admin-token')
+        .send(userData)
+        .expect(201);
+
+      expect(response.body.data).toMatchObject(userData);
+    });
+
+    it('should validate required fields', async () => {
+      const response = await request(app)
+        .post('/api/v1/users')
+        .set('Authorization', 'Bearer admin-token')
+        .send({})
+        .expect(422);
+
+      expect(response.body.error).toBe('Validation Error');
+    });
+  });
+});
+```
+
+## Best Practices
+
+### Performance
+- **Pagination**: Always paginate large datasets
+- **Field Selection**: Allow clients to specify needed fields
+- **Caching**: Implement appropriate caching strategies
+- **Database Queries**: Optimize N+1 queries and use indexes
+
+### Versioning
+- **URL Versioning**: Use `/api/v1/` for major versions
+- **Backward Compatibility**: Maintain old versions during transitions
+- **Deprecation Notices**: Provide clear migration paths
+
+### Monitoring
+- **Request Logging**: Log all API requests with relevant metadata
+- **Error Tracking**: Monitor and alert on error rates
+- **Performance Metrics**: Track response times and throughput
+{% endblock %}
